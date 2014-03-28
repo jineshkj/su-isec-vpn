@@ -66,7 +66,7 @@ parse_options(int argc, char **argv)
   }
   
   if (optind < argc) {
-    PORT = atoi(argv[argc-1]);
+    PORT = htons(atoi(argv[argc-1]));
     
     if ((argc - optind) == 2) {
       struct in_addr addr;

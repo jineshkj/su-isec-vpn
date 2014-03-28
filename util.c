@@ -18,6 +18,7 @@
 #include <net/if.h>
 #include <linux/if_tun.h>
 #include <sys/ioctl.h>
+#include <arpa/inet.h>
 
 #include "ivpn.h"
 
@@ -32,7 +33,7 @@ create_udp_socket(uint16_t port)
   int s;
   struct sockaddr_in sin;
   
-  if ((s = socket(PF_INET, SOCK_DGRAM, 0)) != -1) {
+  if ((s = socket(AF_INET, SOCK_DGRAM, 0)) != -1) {
     int optval = 1;
     
     /* avoid EADDRINUSE error on bind() */
@@ -46,7 +47,7 @@ create_udp_socket(uint16_t port)
     
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = htonl(INADDR_ANY);
-    sin.sin_port = htons(port);
+    sin.sin_port = port;
     
     if (bind(s,(struct sockaddr *)&sin, sizeof(sin)) < 0) {
       printf("Bind error : %s\n", strerror(errno));
@@ -59,6 +60,8 @@ create_udp_socket(uint16_t port)
   
   return s;
 }
+
+//---- bring up an interface ---
 
 static int
 iff_up(const char *ifname)
@@ -76,11 +79,17 @@ iff_up(const char *ifname)
   strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
   
   r = ioctl(s, SIOCGIFFLAGS, &ifr);
+  if (r == -1) {
+    printf("Failed to get interface flags : %s\n", strerror(errno));
+  }
   
   if (r != -1) {
     /* set the IFF_UP flag */
     ifr.ifr_flags |= IFF_UP;
     r = ioctl(s, SIOCSIFFLAGS, &ifr);
+    if (r == -1) {
+      printf("Failed to set interface flags : %s\n", strerror(errno));
+    }
   }
   
   close(s);
@@ -119,4 +128,70 @@ create_tun_iface(const char *name)
   close(fd);
   
   return -1;
+}
+
+//---- set IP address for interface ---
+
+int
+set_ifip(const char *ifname, const char *ip)
+{
+  int s, r;
+  struct ifreq ifr;
+  struct sockaddr_in sin;
+  
+  s = socket(AF_INET, SOCK_STREAM, 0);
+  
+  memset(&ifr, 0, sizeof(struct ifreq));
+  snprintf(ifr.ifr_name, IFNAMSIZ, "%s", ifname);
+  
+  memset(&sin, 0, sizeof(struct sockaddr_in));
+  sin.sin_family = AF_INET;
+  sin.sin_addr.s_addr = inet_addr(ip);
+  memcpy(&ifr.ifr_addr, &sin, sizeof(struct sockaddr));
+  
+  r = ioctl(s, SIOCSIFADDR, (char *)&ifr);
+  if (r == -1) {
+    printf("Failed to set ip address : %s\n", strerror(errno));
+  }
+  
+  close(s);
+  
+  return r;
+}
+
+//---- send a text string to remote end ---
+
+int
+send_message(int sock, uint32_t ip, uint16_t port, const char *str)
+{
+  struct sockaddr_in to;
+  
+  memset(&to, 0, sizeof(to));
+  
+  to.sin_family = AF_INET;
+  to.sin_port = port;
+  to.sin_addr.s_addr = ip;
+  
+  return sendto(sock, str, strlen(str) + 1, 0, (struct sockaddr *)&to, sizeof(to));
+}
+
+//---- receive packet from udp socket ---
+
+int
+recv_data(int sock, void * buf, int bufsz, struct in_addr *remote_ip)
+{
+  int r;
+  
+  struct sockaddr_in from;
+  socklen_t fromlen = sizeof(from);
+  
+  memset(&from, 0, sizeof(from));
+  r = recvfrom(sock, buf, bufsz, 0, (struct sockaddr *)&from, &fromlen);
+  
+  if (r != -1)
+    *remote_ip = from.sin_addr;
+  else
+    printf("Failed to recvfrom : %s\n", strerror(errno));
+  
+  return r;
 }
