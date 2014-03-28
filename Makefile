@@ -4,11 +4,23 @@
 #
 
 TARGET   = ivpn
+
 SOURCES  = ivpn.c
+SOURCES += util.c
+SOURCES += server.c
+SOURCES += client.c
+
 OBJS    := $(patsubst %.c,%.o,$(SOURCES))
 
+CFLAGS += -Wall -Werror
+
+all: install
+
+install: $(TARGET)
+	cp -v $< /tmp
+	
 $(TARGET): $(OBJS)
-	cc -o $@ $<
+	cc -o $@ $^
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGET) $(OBJS) *~

@@ -22,4 +22,10 @@ ivpn_server(uint16_t port);
 int
 ivpn_client(uint32_t ip, uint16_t port);
 
+int
+create_udp_socket(uint16_t port);
+
+int
+create_tun_iface(const char *name);
+
 #endif // ISEC_IVPN_H
