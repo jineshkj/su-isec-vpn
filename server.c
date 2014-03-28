@@ -55,11 +55,5 @@ ivpn_server(uint16_t port)
     client_ip = addr.s_addr;
   }
   
-  while (1) {
-    printf(".");
-    fflush(stdout);
-    sleep(1);
-  }
-  
-  return 0;
+  return link_fds(tun_fd, udp_sock, client_ip, client_port);
 }

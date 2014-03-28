@@ -45,11 +45,5 @@ ivpn_client(uint32_t ip, uint16_t port)
   
   send_message(udp_sock, ip, port, "Hello ivpn !!");
   
-  while (1) {
-    printf(".");
-    fflush(stdout);
-    sleep(1);
-  }
-  
-  return 0;
+  return link_fds(tun_fd, udp_sock, server_ip, server_port);
 }

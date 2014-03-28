@@ -166,8 +166,6 @@ send_message(int sock, uint32_t ip, uint16_t port, const char *str)
 {
   struct sockaddr_in to;
   
-  memset(&to, 0, sizeof(to));
-  
   to.sin_family = AF_INET;
   to.sin_port = port;
   to.sin_addr.s_addr = ip;
@@ -185,7 +183,6 @@ recv_data(int sock, void * buf, int bufsz, struct in_addr *remote_ip)
   struct sockaddr_in from;
   socklen_t fromlen = sizeof(from);
   
-  memset(&from, 0, sizeof(from));
   r = recvfrom(sock, buf, bufsz, 0, (struct sockaddr *)&from, &fromlen);
   
   if (r != -1)
@@ -194,4 +191,68 @@ recv_data(int sock, void * buf, int bufsz, struct in_addr *remote_ip)
     printf("Failed to recvfrom : %s\n", strerror(errno));
   
   return r;
+}
+
+//---- an event loop linking tunnel with socket ---
+
+int
+link_fds(int tun_fd, int udp_sock, uint32_t ip, uint16_t port)
+{
+  int max_fd, r;
+  fd_set fdset;
+  char buf[1500];
+  
+  while (1) {
+    FD_ZERO(&fdset);
+    FD_SET(tun_fd, &fdset);
+    FD_SET(udp_sock, &fdset);
+    
+    max_fd = (tun_fd > udp_sock) ? tun_fd : udp_sock;
+    
+    if (select(max_fd + 1, &fdset, NULL, NULL, NULL) < 0) {
+      printf("Select error : %s\n", strerror(errno));
+      return -1;
+    }
+    
+    if (FD_ISSET(tun_fd, &fdset)) {
+      struct sockaddr_in to;
+
+      r = read(tun_fd, buf, sizeof(buf));
+      if (r < 0) {
+        printf("tun_fd read error : %s\n", strerror(errno));
+        return -1;
+      }
+      
+      printf("Read %d bytes from tun\n", r);
+      
+      memset(&to, 0, sizeof(to));
+      to.sin_family = AF_INET;
+      to.sin_port = port;
+      to.sin_addr.s_addr = ip;
+      
+      if (sendto(udp_sock, buf, r, 0, (struct sockaddr *)&to, sizeof(to)) < 0) {
+        printf("udp_sock send error : %s\n", strerror(errno));
+        return -1;
+      }
+      
+    } else {
+      struct sockaddr_in from;
+      socklen_t fromlen = sizeof(from);
+      
+      r = recvfrom(udp_sock, buf, sizeof(buf), 0, (struct sockaddr *)&from, &fromlen);
+      if (r < 0) {
+        printf("udp_sock recv error : %s\n", strerror(errno));
+        return -1;
+      }
+      
+      printf("Received %d bytes from sock\n", r);
+      
+      // if ((from.sin_addr.s_addr != from.sin_addr.s_addr) || (sout.sin_port != from.sin_port))
+      if (write(tun_fd, buf, r) < 0) {
+        printf("tun_fd write error : %s\n", strerror(errno));
+        return -1;
+      }
+      
+    }
+  }
 }
