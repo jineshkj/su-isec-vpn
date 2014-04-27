@@ -9,10 +9,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <termios.h>
+#include <assert.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pwd.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -21,7 +23,12 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 
-#include "ivpn.h"
+#include "log.h"
+#include "error.h"
+#include "control.h"
+#include "sslutil.h"
+
+#include "util.h"
 
 #define TUN_CTL_DEV "/dev/net/tun"
 #define TUNNEL_MODE IFF_TUN
@@ -43,13 +50,30 @@ get_password(const char *prompt)
   static char password[128];
 
   /* save termios and disable echo */
-  tcgetattr(fileno(stdin), &oflags);
+  if (tcgetattr(fileno(stdin), &oflags) == -1) {
+    lerr("Could not save current terminal attributes : %s", strerror(errno));
+    return 0;
+  }
+
   nflags = oflags;
   nflags.c_lflag &= ~ECHO;
   nflags.c_lflag |= ECHONL;
 
   if (tcsetattr(fileno(stdin), TCSANOW, &nflags) != 0) {
-    // TODO: log error
+    lerr("Could not set new terminal attributes : %s", strerror(errno));
+    return 0;
+  }
+
+  if (tcgetattr(fileno(stdin), &nflags) == -1) {
+    lerr("Could not get new terminal attributes : %s", strerror(errno));
+    return 0;
+  }
+
+  /* man page recommends verifying the set values. we do not want to take
+   * any risk since it involves user inputting password */
+  if ((nflags.c_lflag & ECHO) || !(nflags.c_lflag & ECHONL)) {
+    lerr("New terminal attributes are not proper");
+    (void) tcsetattr(fileno(stdin), TCSANOW, &oflags);
     return 0;
   }
 
@@ -59,17 +83,104 @@ get_password(const char *prompt)
 
   /* restore termios */
   if (tcsetattr(fileno(stdin), TCSANOW, &oflags) != 0) {
-    // TODO: log error
+    lerr("Could not restore old terminal attributes : %s", strerror(errno));
     return 0;
   }
 
   return password;
 }
 
-int
-tcp_connect(const char *server, int port)
+
+const char *
+get_current_user()
 {
-  return -1;
+  struct passwd *pwd = getpwuid(getuid());
+  if (pwd == 0) {
+    lerr("Unable to get current user name");
+    return 0;
+  }
+
+  return pwd->pw_name;
+}
+
+cm_header_t *
+recv_control_message(sslutil_connection_t ssl_conn)
+{
+  int r, toread;
+  static char buffer[MAX_CONTROL_MESSAGE_LEN];
+  cm_header_t *hdr = (cm_header_t *) buffer;
+
+  r = sslutil_read_all(ssl_conn, buffer, sizeof(cm_header_t));
+  if (r < sizeof(cm_header_t))
+    return 0;
+
+  cm_header_ntoh(hdr);
+
+  assert(sizeof(buffer) >= hdr->cm_len);
+
+  toread = hdr->cm_len - r;
+
+  r = sslutil_read_all(ssl_conn, buffer + r, toread);
+  if (r < toread)
+    return 0;
+
+  return hdr;
+}
+
+int
+send_control_message(sslutil_connection_t ssl_conn, cm_header_t *cm)
+{
+  int wlen = ntohs(cm->cm_len);
+  if (sslutil_write_all(ssl_conn, cm, wlen) != wlen)
+    return 0;
+
+  return 1;
+}
+
+int
+ivpn_protocol_handshake(sslutil_connection_t ssl_conn)
+{
+  char response[1024]; // big enough for holding handshake response
+
+  assert(sizeof(response) >= sizeof(IVPN_PROTO_HEADER));
+
+  if (sslutil_write_all(ssl_conn, IVPN_PROTO_HEADER, sizeof(IVPN_PROTO_HEADER))
+      < sizeof(IVPN_PROTO_HEADER)) {
+    lerr("Unable to write IVPN handshake message");
+    return 0;
+  }
+
+  if (sslutil_read_all(ssl_conn, response, sizeof(IVPN_PROTO_HEADER))
+      < sizeof(IVPN_PROTO_HEADER)) {
+    lerr ("Unable to verify IVPN handshake message");
+    return 0;
+  }
+
+  if (strncmp(response, IVPN_PROTO_HEADER, sizeof(response)) != 0) {
+    lerr("IVPN Protocol handshake message incorrect");
+    return 0;
+  }
+
+  return 1;
+}
+
+int
+ivpn_protocol_authenticate(sslutil_connection_t ssl_conn, const char *user,
+                           const char *pass)
+{
+  if (send_control_message(
+      ssl_conn, (cm_header_t *) create_cm_auth_password(user, pass))) {
+    cm_header_t *h = recv_control_message(ssl_conn);
+    if (h->cm_type == CM_TYPE_AUTH) {
+      cm_auth_response_t *rsp = (cm_auth_response_t *) h;
+      cm_auth_response_ntoh(rsp);
+
+      if (rsp->status == CM_AUTH_OK)
+        return rsp->port;
+    }
+  }
+
+  return 0;
 }
 
 

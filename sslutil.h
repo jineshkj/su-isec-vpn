@@ -19,4 +19,10 @@ sslutil_read(sslutil_connection_t c, void *buf, int siz);
 int
 sslutil_write(sslutil_connection_t c, const void *buf, int siz);
 
+int
+sslutil_read_all(sslutil_connection_t c, void *buf, int siz);
+
+int
+sslutil_write_all(sslutil_connection_t c, const void *buf, int siz);
+
 #endif // ISEC_SSLUTIL_H

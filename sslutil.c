@@ -204,7 +204,7 @@ sslutil_read(sslutil_connection_t c, void *buf, int siz)
   
   ERR_clear_error();
 
-  if ((ret = SSL_read((SSL *) c, buf, siz)) <= 0)
+  if ((ret = SSL_read((SSL *) c, buf, siz)) < 0)
     log_ssl_err ("Read failed on SSL object");
   
   return ret;
@@ -217,8 +217,48 @@ sslutil_write(sslutil_connection_t c, const void *buf, int siz)
   
   ERR_clear_error();
 
-  if ((ret = SSL_write((SSL *) c, buf, siz)) <= 0)
+  if ((ret = SSL_write((SSL *) c, buf, siz)) < 0)
     log_ssl_err ("Write failed on SSL object");
   
   return ret;
+}
+
+int
+sslutil_read_all(sslutil_connection_t c, void *buf, int siz)
+{
+  int rbytes = 0;
+
+  while (siz > 0) {
+    int r = sslutil_read(c, buf + rbytes, siz);
+    if (r < 0)
+      return -1;
+
+    if (r == 0) // probably end of connection
+      break;
+
+    rbytes += r;
+    siz -= r;
+  }
+
+  return rbytes;
+}
+
+int
+sslutil_write_all(sslutil_connection_t c, const void *buf, int siz)
+{
+  int wbytes = 0;
+
+  while (siz > 0) {
+    int w = sslutil_write(c, buf + wbytes, siz);
+    if (w < 0)
+      return -1;
+
+    if (w == 0) // probably end of connection
+      break;
+
+    wbytes += w;
+    siz -= w;
+  }
+
+  return wbytes;
 }

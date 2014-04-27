@@ -85,6 +85,36 @@ parse_options(int argc, char **argv)
 }
 
 static int
+control_channel_handler(int connfd)
+{
+  int data_port = 0;
+  sslutil_connection_t ssl_conn;
+
+  linfo("Connection handler started. Initiating SSL handshake.");
+
+  ssl_conn = sslutil_connect(connfd, server);
+  if (ssl_conn == 0) {
+    linfo("Unable to start SSL session");
+    return EXIT_SSL_ERROR;
+  }
+
+  if (!ivpn_protocol_handshake(ssl_conn))
+    return EXIT_PROTO_ERROR;
+
+  linfo ("IVPN Protocol handshake completed successfully.");
+
+  data_port = ivpn_protocol_authenticate(ssl_conn, username, password);
+  if (data_port == 0) {
+    linfo ("Authentication failed.");
+    return EXIT_AUTH_ERROR;
+  }
+
+  linfo ("Authenticated with server. Data port is %u", data_port);
+
+  return 0;
+}
+
+static int
 run_client()
 {
   int connfd = -1;
@@ -97,8 +127,7 @@ run_client()
 
   linfo ("Connected to %s:%u", server, port);
 
-
-  return -1;
+  return control_channel_handler(connfd);
 }
 
 int
@@ -106,11 +135,19 @@ main(int argc, char *argv[])
 {
   parse_options(argc, argv);
   
+  if (username == 0) {
+    username = get_current_user();
+    if (username == 0)
+      exit(EXIT_FAILURE);
+  }
+
   password = get_password("Password:");
   if (password == 0) {
     exit(EXIT_PASSWORD);
   }
   
+  sslutil_init(CA_CERT_FILE, 0, 0);
+
   return run_client();
 }
 

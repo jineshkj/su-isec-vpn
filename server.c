@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
 #include "log.h"
 #include "util.h"
@@ -14,6 +16,7 @@
 #include "defaults.h"
 #include "control.h"
 #include "tcputil.h"
+#include "sslutil.h"
 
 static int port = IVPN_SERV_PORT;
 
@@ -68,6 +71,153 @@ parse_options(int argc, char **argv)
   }
 }
 
+
+//static int
+//control_channel_handler(sslutil_connection_t conn)
+//{
+//  int r;
+//  int rbytes = 0;
+//  char buffer[65536]; // TODO: move to static memory
+//  cm_header_t *hdr = (cm_header_t *) buffer;
+//
+//  while (1) {
+//    // TODO: process control messages from client
+//    linfo("Waiting for control message from client");
+//
+//    r = sslutil_read(conn, buffer + rbytes, sizeof(cm_header_t) - rbytes);
+//    if (r < 0) {
+//      lerr ("Not able to read from SSL connection. Terminating.");
+//      return EXIT_SSL_ERROR;
+//    }
+//
+//    if (r == 0)
+//      break;
+//
+//    rbytes += r;
+//    if (rbytes == sizeof(cm_header_t)) {
+//      rbytes = 0;
+//
+//    }
+//  }
+//
+//  return EXIT_OK;
+//}
+
+static int
+process_auth_password(sslutil_connection_t conn, cm_auth_password_t *ap)
+{
+  linfo("Processing password based authentication");
+
+  ldbg("User = %s", ap->username);
+  ldbg("Pass = %s", ap->password);
+
+  cm_header_t *rsp = (cm_header_t *) create_cm_auth_response(CM_AUTH_OK, 12345);
+
+  if (send_control_message(conn, rsp))
+    return EXIT_OK;
+
+  return EXIT_AUTH_ERROR;
+}
+
+static int
+process_auth(sslutil_connection_t conn, cm_auth_t *auth)
+{
+  int ret = EXIT_OK;
+
+  switch (auth->type)
+  {
+  case CM_AUTH_PASSWORD:
+    ret = process_auth_password(conn, (cm_auth_password_t *) auth);
+    break;
+
+  default:
+    lerr("Unknown authentication type %u", auth->type);
+    break;
+  }
+
+  return ret;
+}
+
+static int
+process_control_message(sslutil_connection_t conn, cm_header_t *cm)
+{
+  int ret = EXIT_OK;
+
+  switch (cm->cm_type)
+  {
+  case CM_TYPE_AUTH:
+    ret = process_auth(conn, (cm_auth_t *) cm);
+    break;
+
+  default:
+    lerr("Unknown control message type %u", cm->cm_type);
+    break;
+  }
+
+  return ret;
+}
+
+static int
+control_channel_handler(int connfd)
+{
+  int ret = 0;
+  sslutil_connection_t ssl_conn;
+
+  linfo("Connection handler started. Initiating SSL handshake.");
+
+  ssl_conn = sslutil_accept(connfd);
+  if (ssl_conn == 0) {
+    linfo("Unable to start SSL session");
+    return EXIT_SSL_ERROR;
+  }
+
+  if (!ivpn_protocol_handshake(ssl_conn))
+    return EXIT_PROTO_ERROR;
+
+  linfo ("IVPN Protocol handshake completed successfully.");
+
+  while (1) {
+    cm_header_t *cm = recv_control_message(ssl_conn);
+    if (cm == 0) {
+      lerr("Control channel terminated. Stopping.");
+      break;
+    }
+
+    linfo("Received control message of %u bytes", cm->cm_len);
+
+    ret = process_control_message(ssl_conn, cm);
+    if (ret != EXIT_OK)
+      break;
+  }
+
+  // TODO: terminate gracefully.
+
+  return ret;
+}
+
+static pid_t
+fork_connection_handler(int connfd)
+{
+  pid_t childpid;
+
+  childpid = fork();
+  switch (childpid)
+  {
+  case -1:
+    lerr ("Could not create child process : %s", strerror(errno));
+    break;
+
+  case 0: // child
+    exit(control_channel_handler(connfd)); // exit() so we do not return back
+    break;
+
+  default: // parent
+    break;
+  }
+
+  return childpid;
+}
+
 static int
 run_server()
 {
@@ -84,7 +234,8 @@ run_server()
   // TODO: need a loop termination mechanism using SIGQUIT signal
   while (1) {
     char client_ip[32];
-    int client_port;
+    int client_port = 0;
+    pid_t conn_handler = 0;
 
     ldbg ("Waiting for connection");
 
@@ -96,8 +247,14 @@ run_server()
 
     linfo ("New connection from %s:%u", client_ip, client_port);
 
-    // TODO: fork child to handle connection
+    /* start connection handler process */
+    if ((conn_handler = fork_connection_handler(connfd)) == -1) {
+      lerr ("Unable to start connection handler");
+    } else {
+      linfo ("Connection handler running as PID %u", conn_handler);
+    }
 
+    close (connfd); // connection handler process will use it further
   }
 
   return 0;
@@ -107,6 +264,8 @@ int
 main(int argc, char *argv[])
 {
   parse_options(argc, argv);
+
+  sslutil_init(CA_CERT_FILE, SERVER_CERT_FILE, SERVER_KEY_FILE);
 
   return run_server();
 }
