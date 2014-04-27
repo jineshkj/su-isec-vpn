@@ -1,0 +1,7 @@
+#ifndef ISEC_DEFAULTS_H
+#define ISEC_DEFAULTS_H
+
+#define IVPN_SERV_PORT    55555
+#define IVPN_TCP_BACKLOG  128
+
+#endif // ISEC_DEFAULTS_H

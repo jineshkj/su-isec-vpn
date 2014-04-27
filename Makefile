@@ -3,24 +3,37 @@
 # of Internet Security course
 #
 
-TARGET   = ivpn
+CLIENT = ivpn-client
+SERVER = ivpn-server
 
-SOURCES  = ivpn.c
-SOURCES += util.c
-SOURCES += server.c
-SOURCES += client.c
+COMMON  = util.c
+COMMON += control.c
+COMMON += log.c
+COMMON += sslutil.c
+COMMON += tcputil.c
 
-OBJS    := $(patsubst %.c,%.o,$(SOURCES))
+CLI_SRC  = client.c
+CLI_SRC += $(COMMON)
 
-CFLAGS += -Wall -Werror
+SRV_SRC  = server.c
+SRV_SRC += $(COMMON)
+
+CLI_OBJS    := $(patsubst %.c,%.o,$(CLI_SRC))
+SRV_OBJS    := $(patsubst %.c,%.o,$(SRV_SRC))
+
+CFLAGS  += -Wall -Werror
+LDFLAGS += -lssl -lcrypto
 
 all: install
 
-install: $(TARGET)
-	cp -v $< /tmp
+install: $(CLIENT) $(SERVER)
+	cp -v $(CLIENT) $(SERVER) /tmp
 	
-$(TARGET): $(OBJS)
-	cc -o $@ $^
+$(CLIENT): $(CLI_OBJS)
+	cc -o $@ $^ $(LDFLAGS)
+
+$(SERVER): $(SRV_OBJS)
+	cc -o $@ $^ $(LDFLAGS)
 
 clean:
-	rm -f $(TARGET) $(OBJS) *~
+	rm -f $(CLIENT) $(SERVER) $(CLI_OBJS) $(SRV_OBJS) *~

@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <termios.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -24,6 +25,53 @@
 
 #define TUN_CTL_DEV "/dev/net/tun"
 #define TUNNEL_MODE IFF_TUN
+
+static void
+remove_newline(char *s)
+{
+  while (*s != '\0') {
+    if (*s == '\n')
+      *s = '\0';
+    s++;
+  }
+}
+
+const char *
+get_password(const char *prompt)
+{
+  struct termios oflags, nflags;
+  static char password[128];
+
+  /* save termios and disable echo */
+  tcgetattr(fileno(stdin), &oflags);
+  nflags = oflags;
+  nflags.c_lflag &= ~ECHO;
+  nflags.c_lflag |= ECHONL;
+
+  if (tcsetattr(fileno(stdin), TCSANOW, &nflags) != 0) {
+    // TODO: log error
+    return 0;
+  }
+
+  fprintf(stdout, "%s", prompt);
+  fgets(password, sizeof(password), stdin);
+  remove_newline(password);
+
+  /* restore termios */
+  if (tcsetattr(fileno(stdin), TCSANOW, &oflags) != 0) {
+    // TODO: log error
+    return 0;
+  }
+
+  return password;
+}
+
+int
+tcp_connect(const char *server, int port)
+{
+  return -1;
+}
+
 
 //---- creates a udp socket bound to a given port ---
 
@@ -256,3 +304,4 @@ link_fds(int tun_fd, int udp_sock, uint32_t ip, uint16_t port)
     }
   }
 }
+
