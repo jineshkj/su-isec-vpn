@@ -4,8 +4,12 @@
 #include "log.h"
 #include "cryptutil.h"
 
+#include <string.h>
+
 #include <openssl/err.h>
 #include <openssl/evp.h>
+
+#include <openssl/hmac.h>
 
 static EVP_CIPHER_CTX ctx;
 static int initialized = 0;
@@ -36,6 +40,8 @@ encrypt_data(const void *in, int inlen, void *out, int *outlen,
              const void *iv, const void *key)
 {
   int len;
+
+  ERR_clear_error();
 
   cryptutil_init();
 
@@ -74,6 +80,8 @@ decrypt_data(const void *in, int inlen, void *out, int *outlen,
 {
   int len;
 
+  ERR_clear_error();
+
   cryptutil_init();
 
    /* In this we are using 256 bit AES (i.e. a 256 bit key). The
@@ -104,4 +112,41 @@ decrypt_data(const void *in, int inlen, void *out, int *outlen,
    *outlen += len;
 
    return 1;
+}
+
+int
+hmac_data(const void *in, int inlen, const void *key, void *out, int *outlen)
+{
+  unsigned char *dgst = 0;
+
+  ERR_clear_error();
+
+  dgst = HMAC(EVP_sha256(), key, IVPN_KEY_LENGTH, in, inlen,
+              out, (unsigned int *)outlen);
+  if (dgst == 0) {
+    log_crypt_err("Not able to generate HMAC");
+    return 0;
+  }
+
+  return 1;
+}
+
+int
+hmac_verify(const void *data, int datalen, const void *key, const void *hmac)
+{
+  unsigned int dgstlen;
+  unsigned char dgst[EVP_MAX_MD_SIZE];
+
+  ERR_clear_error();
+
+  if (HMAC(EVP_sha256(), key, IVPN_KEY_LENGTH, data, datalen,
+           dgst, &dgstlen) == 0) {
+    log_crypt_err("Not able to generate HMAC");
+    return 0;
+  }
+
+  if (memcmp(dgst, hmac, dgstlen) == 0)
+    return 1;
+
+  return 0;
 }

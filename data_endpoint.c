@@ -46,6 +46,8 @@ static int pipes[NUM_PIPES][2] = { { -1, -1 }, {-1, -1 } };
 #define PARENT_READ_FD  pipes[PARENT_READ_PIPE][PIPE_READ_FD]
 #define PARENT_WRITE_FD pipes[PARENT_WRITE_PIPE][PIPE_WRITE_FD]
 
+static int quit_process = 0;
+
 static inline void
 close_parent_pipes()
 {
@@ -84,6 +86,15 @@ create_pipes()
   return 1;
 }
 
+static int
+set_mtu(const char *ifname, int mtu)
+{
+  char command[256];
+
+  snprintf(command, sizeof(command), "ifconfig %s mtu %u", ifname, mtu);
+  return system(command);
+}
+
 //---- create the new tunnel interface ---
 
 int
@@ -110,6 +121,8 @@ create_tun_iface()
 
   linfo("Allocated interface %s", ifr.ifr_name);
 
+  set_mtu(ifr.ifr_name, 1400); // just to avoid IP fragmentation
+
   return tun_fd;
 }
 
@@ -119,6 +132,8 @@ process_event_on_tunnel(data_endpoint_t *ep)
 {
   int t;
   int n;
+  int hmaclen;
+
   unsigned char tunnel_data[2048]; // should be enough since MTU is just 1500
   unsigned char network_data[2048];
   unsigned char *iv = network_data;
@@ -139,7 +154,10 @@ process_event_on_tunnel(data_endpoint_t *ep)
 
   memset(ep->key, 0, sizeof(ep->key)); // ??
 
+  /* add 32 byte IV first */
   generate_pseudo_random(iv, IVPN_IV_LENGTH);
+
+  /* add encrypted data now */
   if (!encrypt_data(tunnel_data, t, network_data + IVPN_IV_LENGTH, &n, iv, ep->key)) {
     lerr("Not able to encrypt data");
     return -1;
@@ -148,6 +166,13 @@ process_event_on_tunnel(data_endpoint_t *ep)
   ldbg("Encrypted data contains %d bytes", n);
 
   n += IVPN_IV_LENGTH;
+
+  /* add HMAC for the entire encrypted packet */
+  if (!hmac_data(network_data, n, ep->key, network_data + n, &hmaclen)) {
+    return -1;
+  }
+
+  n += hmaclen;
 
   if (sendto(ep->udp_sock, network_data, n, 0, (struct sockaddr *)&to, sizeof(to)) < n) {
     lerr("udp_sock send error : %s", strerror(errno));
@@ -179,6 +204,14 @@ process_event_on_udp(data_endpoint_t *ep)
 
   memset(ep->key, 0, sizeof(ep->key));
 
+  /* verify hmac */
+  n -= 32;
+  if (!hmac_verify(network_data, n, ep->key, network_data + n)) {
+    lerr("HMAC verification for data failed. Discarding packet.");
+    return -1;
+  }
+
+  /* decrypt data */
   n -= IVPN_KEY_LENGTH;
   if (!decrypt_data(network_data + IVPN_KEY_LENGTH, n, tunnel_data, &t, iv, ep->key)) {
     lerr("Not able to encrypt data");
@@ -199,7 +232,18 @@ process_event_on_udp(data_endpoint_t *ep)
 static int
 process_event_on_pipe(data_endpoint_t *ep)
 {
-  lerr("Can not process event from pipe fd");
+  int r;
+
+  while (1) {
+    r = read(ep->read_fd, &ep->key, sizeof(ep->key));
+
+    if (r < sizeof(ep->key)) {
+      lerr("Error reading from control pipe. Quitting process.");
+      quit_process = 1;
+      break;
+    }
+  }
+
   return -1;
 }
 
@@ -212,7 +256,9 @@ data_endpoint_event_loop(data_endpoint_t *ep)
   int max_fd;
   fd_set fdset;
 
-  while (1) {
+  linfo("Data end-point event loop started");
+
+  while (!quit_process) {
     // TODO: replace select() with epoll()
     FD_ZERO(&fdset);
     FD_SET(ep->tun_fd, &fdset);
@@ -236,6 +282,8 @@ data_endpoint_event_loop(data_endpoint_t *ep)
       process_event_on_pipe(ep);
     }
   }
+
+  linfo("Data end-point event loop ended");
 
   return 0;
 }
