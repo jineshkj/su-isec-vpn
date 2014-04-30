@@ -7,6 +7,9 @@
 #define LOG_LEVEL_DBG   3
 
 void
+set_process_name(const char *p);
+
+void
 set_log_level(int level);
 
 int

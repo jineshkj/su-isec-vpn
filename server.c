@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "log.h"
 #include "util.h"
@@ -17,8 +21,11 @@
 #include "control.h"
 #include "tcputil.h"
 #include "sslutil.h"
+#include "udputil.h"
+#include "data_endpoint.h"
 
 static int port = IVPN_SERV_PORT;
+static char client_ip[32];
 
 static void 
 usage()
@@ -71,38 +78,6 @@ parse_options(int argc, char **argv)
   }
 }
 
-
-//static int
-//control_channel_handler(sslutil_connection_t conn)
-//{
-//  int r;
-//  int rbytes = 0;
-//  char buffer[65536]; // TODO: move to static memory
-//  cm_header_t *hdr = (cm_header_t *) buffer;
-//
-//  while (1) {
-//    // TODO: process control messages from client
-//    linfo("Waiting for control message from client");
-//
-//    r = sslutil_read(conn, buffer + rbytes, sizeof(cm_header_t) - rbytes);
-//    if (r < 0) {
-//      lerr ("Not able to read from SSL connection. Terminating.");
-//      return EXIT_SSL_ERROR;
-//    }
-//
-//    if (r == 0)
-//      break;
-//
-//    rbytes += r;
-//    if (rbytes == sizeof(cm_header_t)) {
-//      rbytes = 0;
-//
-//    }
-//  }
-//
-//  return EXIT_OK;
-//}
-
 static int
 process_auth_password(sslutil_connection_t conn, cm_auth_password_t *ap)
 {
@@ -111,12 +86,32 @@ process_auth_password(sslutil_connection_t conn, cm_auth_password_t *ap)
   ldbg("User = %s", ap->username);
   ldbg("Pass = %s", ap->password);
 
-  cm_header_t *rsp = (cm_header_t *) create_cm_auth_response(CM_AUTH_OK, 12345);
+  if (authenticate_user(ap->username, ap->password)) {
+    cm_header_t * rsp;
+    data_endpoint_t *ep;
 
-  if (send_control_message(conn, rsp))
-    return EXIT_OK;
+    ep = start_data_endpoint();
 
-  return EXIT_AUTH_ERROR;
+    assert (ep != 0);
+
+    rsp = (cm_header_t *) create_cm_auth_response(CM_AUTH_OK, ep->udp_port);
+
+    ep->peer_ip = inet_addr(client_ip);
+    ep->peer_port = ntohs(ap->auth.port);
+    write(ep->write_fd, &ep->peer_ip, sizeof(ep->peer_ip));
+    write(ep->write_fd, &ep->peer_port, sizeof(ep->peer_port));
+
+    if (send_control_message(conn, rsp))
+      return EXIT_OK;
+  } else
+  {
+    cm_header_t *rsp = (cm_header_t *) create_cm_auth_response(CM_AUTH_FAIL, 0);
+
+    if (send_control_message(conn, rsp))
+      return EXIT_OK;
+  }
+
+  return EXIT_PROTO_ERROR;
 }
 
 static int
@@ -233,7 +228,6 @@ run_server()
 
   // TODO: need a loop termination mechanism using SIGQUIT signal
   while (1) {
-    char client_ip[32];
     int client_port = 0;
     pid_t conn_handler = 0;
 
@@ -263,9 +257,12 @@ run_server()
 int
 main(int argc, char *argv[])
 {
+  set_process_name("ivpn-server");
+
   parse_options(argc, argv);
 
-  sslutil_init(CA_CERT_FILE, SERVER_CERT_FILE, SERVER_KEY_FILE);
+  if (!sslutil_init(CA_CERT_FILE, SERVER_CERT_FILE, SERVER_KEY_FILE))
+    return EXIT_SSL_ERROR;
 
   return run_server();
 }

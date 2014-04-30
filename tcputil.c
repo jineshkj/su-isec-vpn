@@ -27,7 +27,7 @@ is_ip(const char *str)
   return 1;
 }
 
-static const char *
+const char *
 get_ip_from_name(const char *name)
 {
   struct   hostent *h;
@@ -56,7 +56,7 @@ tcputil_connect(const char *server, int port)
   /* covert domain name to ip address */
   if ((server = get_ip_from_name(server)) == 0)
     return -1;
-  
+
   if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
     lerr ("Could not create socket : %s", strerror(errno));
     return -1;

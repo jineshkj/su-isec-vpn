@@ -33,7 +33,7 @@ cm_auth_response_hton(cm_auth_response_t *r)
 
 
 const cm_auth_password_t *
-create_cm_auth_password(const char *user, const char *pass)
+create_cm_auth_password(const char *user, const char *pass, int port)
 {
   static cm_auth_password_t cm;
   
@@ -43,6 +43,7 @@ create_cm_auth_password(const char *user, const char *pass)
   cm.auth.hdr.cm_type = CM_TYPE_AUTH;
   
   cm.auth.type = CM_AUTH_PASSWORD;
+  cm.auth.port = htons(port);
   
   strncpy(cm.username, user, sizeof(cm.username));
   cm.username[sizeof(cm.username) - 1] = '\0';

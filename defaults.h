@@ -8,6 +8,7 @@
 #define SERVER_CERT_FILE "/etc/ivpn/isec-vpn.crt"
 #define SERVER_KEY_FILE  "/etc/ivpn/isec-vpn.key"
 
-//#define KEY_LENGTH       16 // AES key length
+#define IVPN_IV_LENGTH   32 // AES iv length of 16 bytes = 128 bits
+#define IVPN_KEY_LENGTH  32 // AES key length of 32 bytes = 256 bits
 
 #endif // ISEC_DEFAULTS_H

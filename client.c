@@ -7,6 +7,11 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <assert.h>
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "log.h"
 #include "util.h"
@@ -15,6 +20,7 @@
 #include "control.h"
 #include "tcputil.h"
 #include "sslutil.h"
+#include "data_endpoint.h"
 
 static const char *username = 0;
 static const char *password = 0;
@@ -87,7 +93,7 @@ parse_options(int argc, char **argv)
 static int
 control_channel_handler(int connfd)
 {
-  int data_port = 0;
+  data_endpoint_t *ep;
   sslutil_connection_t ssl_conn;
 
   linfo("Connection handler started. Initiating SSL handshake.");
@@ -103,13 +109,25 @@ control_channel_handler(int connfd)
 
   linfo ("IVPN Protocol handshake completed successfully.");
 
-  data_port = ivpn_protocol_authenticate(ssl_conn, username, password);
-  if (data_port == 0) {
+  ep = start_data_endpoint();
+
+  assert(ep != 0);
+
+  ep->peer_port = ivpn_protocol_authenticate(ssl_conn, username, password, ep->udp_port);
+  if (ep->peer_port == 0) {
     linfo ("Authentication failed.");
     return EXIT_AUTH_ERROR;
   }
 
-  linfo ("Authenticated with server. Data port is %u", data_port);
+  linfo ("Authenticated with server. Data port is %u", ep->peer_port);
+
+  ep->peer_ip = inet_addr(get_ip_from_name(server));
+
+  write(ep->write_fd, &ep->peer_ip, sizeof(ep->peer_ip));
+  write(ep->write_fd, &ep->peer_port, sizeof(ep->peer_port));
+
+  while (1)
+    sleep (1);
 
   return 0;
 }
@@ -133,6 +151,8 @@ run_client()
 int
 main(int argc, char *argv[])
 {
+  set_process_name("ivpn-client");
+
   parse_options(argc, argv);
   
   if (username == 0) {
@@ -146,7 +166,8 @@ main(int argc, char *argv[])
     exit(EXIT_PASSWORD);
   }
   
-  sslutil_init(CA_CERT_FILE, 0, 0);
+  if (!sslutil_init(CA_CERT_FILE, 0, 0))
+    return EXIT_SSL_ERROR;
 
   return run_client();
 }

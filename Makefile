@@ -6,11 +6,14 @@
 CLIENT = ivpn-client
 SERVER = ivpn-server
 
-COMMON  = util.c
+COMMON  = log.c
+COMMON += util.c
 COMMON += control.c
-COMMON += log.c
 COMMON += sslutil.c
+COMMON += cryptutil.c
 COMMON += tcputil.c
+COMMON += udputil.c
+COMMON += data_endpoint.c
 
 CLI_SRC  = client.c
 CLI_SRC += $(COMMON)

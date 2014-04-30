@@ -76,6 +76,10 @@ sslutil_init(const char *cacert_file, const char *certfile,
     goto FAILURE;
   }
   
+  /* VPN server will not be verifying the client's certificate */
+  SSL_CTX_set_verify(ssl_server_ctx, SSL_VERIFY_NONE, NULL);
+  SSL_CTX_set_verify(ssl_client_ctx, SSL_VERIFY_PEER, NULL);
+
   /* load custom CA certificate if given */
   if (cacert_file) {
     SSL_CTX_load_verify_locations(ssl_client_ctx, cacert_file, NULL);
@@ -134,8 +138,6 @@ sslutil_connect(int sock, const char *CN)
     return 0;
   }
   
-  SSL_set_verify(ssl, SSL_VERIFY_PEER, NULL);
-    
   if (SSL_set_fd (ssl, sock) != 1) {
     log_ssl_err ("Unable to set FD for SSL object");
     SSL_free(ssl);
@@ -179,9 +181,6 @@ sslutil_accept(int sock)
     return 0;
   }
   
-  /* VPN server will not be verifiying the client's certificate */
-  SSL_set_verify(ssl, SSL_VERIFY_NONE, NULL);
-    
   if (SSL_set_fd (ssl, sock) != 1) {
     log_ssl_err ("Unable to set FD for SSL object");
     SSL_free(ssl);

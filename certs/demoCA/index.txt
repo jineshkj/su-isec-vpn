@@ -1,0 +1,1 @@
+V	150427141253Z		1000	unknown	/C=US/ST=New York/O=Internet Security Course/OU=VPN Server Department/CN=vpn.isec.syr.edu/emailAddress=admin@vpn.isec.syr.edu

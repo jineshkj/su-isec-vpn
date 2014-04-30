@@ -35,7 +35,8 @@ cm_header_hton(cm_header_t *hdr);
 
 typedef struct cm_auth {
   cm_header_t hdr;
-  uint8_t     type;
+  uint8_t     type; // change to 16 bits ??
+  uint16_t    port;
 } __attribute__((packed)) cm_auth_t;
 
 #define CM_AUTH_OK   0
@@ -62,9 +63,8 @@ typedef struct cm_auth_password {
   char      password[MAX_PASSWORD];
 }__attribute__((packed)) cm_auth_password_t;
 
-
 const cm_auth_password_t *
-create_cm_auth_password(const char *user, const char *pass);
+create_cm_auth_password(const char *user, const char *pass, int port);
 
 const cm_auth_response_t *
 create_cm_auth_response(int status, int port);

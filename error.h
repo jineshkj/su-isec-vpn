@@ -10,5 +10,6 @@
 #define EXIT_TCP_ERROR    4  // error in tcp communication channel
 #define EXIT_SSL_ERROR    5  // error in SSL protocol layer
 #define EXIT_PROTO_ERROR  6  // error in IVPN protocol
+#define EXIT_UDP_ERROR    7  // error in udp layer
 
 #endif // ISEC_ERROR_H
