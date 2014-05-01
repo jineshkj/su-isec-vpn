@@ -225,7 +225,11 @@ main(int argc, char *argv[])
 
   if (geteuid() != 0) {
     lerr("Effective UID is %u. It need to be 0.", geteuid());
+    return EXIT_FAILURE;
   }
+
+  if (install_sigchld_handler() == 0)
+    return EXIT_FAILURE;
 
   if (username == 0) {
     username = get_current_user();

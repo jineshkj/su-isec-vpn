@@ -32,4 +32,7 @@ generate_true_random(void *data, int datalen);
 int
 generate_pseudo_random(void *data, int datalen);
 
+int
+install_sigchld_handler();
+
 #endif // ISEC_UTIL_H

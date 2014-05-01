@@ -11,9 +11,11 @@
 #include <termios.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <pwd.h>
 
@@ -128,8 +130,8 @@ static int
 null_conv(int num_msg, const struct pam_message **msg,
           struct pam_response **resp, void *appdata_ptr)
 {
-        *resp = reply;
-        return PAM_SUCCESS;
+  *resp = reply;
+  return PAM_SUCCESS;
 }
 
 static int
@@ -142,25 +144,24 @@ authenticate_using_pam(const char *user, const char *pass)
 
   int retval = pam_start(IVPN_PAM_SERVICE, user, &conv, &pamh);
   if (retval == PAM_SUCCESS) {
-          reply = (struct pam_response *)malloc(sizeof(struct pam_response));
-          reply[0].resp = strdup(pass);
-          reply[0].resp_retcode = 0;
+    reply = (struct pam_response *)malloc(sizeof(struct pam_response));
+    reply[0].resp = strdup(pass);
+    reply[0].resp_retcode = 0;
 
-          retval = pam_authenticate(pamh, 0);
+    retval = pam_authenticate(pamh, 0);
 
-          if (retval == PAM_SUCCESS)
-            linfo("PAM authentication succeeded for user %s", user);
-          else
-            lerr("PAM authentication FAILED for user %s", user);
+    if (retval == PAM_SUCCESS)
+      linfo("PAM authentication succeeded for user %s", user);
+    else
+      lerr("PAM authentication FAILED for user %s", user);
 
-          pam_end(pamh, PAM_SUCCESS);
+    pam_end(pamh, PAM_SUCCESS);
   } else
   {
     lerr("Unable to start PAM session '%s'", IVPN_PAM_SERVICE);
   }
 
   return (retval == PAM_SUCCESS) ? 1 : 0;
-
 }
 
 int
@@ -290,3 +291,32 @@ generate_pseudo_random(void *data, int datalen)
 
   return 1;
 }
+
+static void
+sigchld_handler(int signum)
+{
+  pid_t childpid;
+
+  while ((childpid = waitpid(-1, 0, WNOHANG)) > 0)
+    linfo("Child with PID %u exited and waited.", childpid);
+}
+
+int
+install_sigchld_handler()
+{
+  struct sigaction sa;
+
+  sa.sa_handler = sigchld_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART; /* Restart functions if
+                      interrupted by handler */
+  if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+    lerr("Unable to install SIGCHLD handler : %s", strerror(errno));
+    return 0;
+  }
+
+  linfo("Installed handler for SIGCHLD signal");
+
+  return 1;
+}
+

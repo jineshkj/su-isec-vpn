@@ -223,8 +223,6 @@ control_channel_handler(int connfd)
       break;
   }
 
-  // TODO: terminate gracefully.
-
   return ret;
 }
 
@@ -302,6 +300,9 @@ main(int argc, char *argv[])
     lerr("Effective UID is %u. It need to be 0.", geteuid());
     return EXIT_FAILURE;
   }
+
+  if (install_sigchld_handler() == 0)
+    return EXIT_FAILURE;
 
   if (!sslutil_init(CA_CERT_FILE, SERVER_CERT_FILE, SERVER_KEY_FILE))
     return EXIT_SSL_ERROR;
