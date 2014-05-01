@@ -57,9 +57,6 @@ cm_auth_response_ntoh(cm_auth_response_t *r);
 void
 cm_auth_response_hton(cm_auth_response_t *r);
 
-#define MAX_USERNAME 64
-#define MAX_PASSWORD 64
-
 typedef struct cm_auth_password {
   cm_auth_t auth;
   char      username[MAX_USERNAME];

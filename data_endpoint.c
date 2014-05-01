@@ -306,14 +306,14 @@ data_endpoint_main(data_endpoint_t *ep)
   r1 = read(ep->read_fd, &ep->peer_ip, sizeof(ep->peer_ip));
   r2 = read(ep->read_fd, &ep->peer_port, sizeof(ep->peer_port));
 
+  if (r1 != sizeof(ep->peer_ip) || r2 != sizeof(ep->peer_port)) {
+    lerr("UDP end-point process terminating due to TCP end-point termination");
+    return EXIT_PROTO_ERROR;
+  }
+
   in.s_addr = ep->peer_ip;
   linfo("Peer IP = %s, port = %u", inet_ntoa(in), ntohs(ep->peer_port));
 
-  if (r1 != sizeof(ep->peer_ip) || r2 != sizeof(ep->peer_port)) {
-    lerr("Unable to retrieve peer IP/port from control end point : %s",
-         strerror(errno));
-    return EXIT_PROTO_ERROR;
-  }
 
   return data_endpoint_event_loop(ep);
 }

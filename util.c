@@ -18,6 +18,7 @@
 #include <pwd.h>
 
 #include <netinet/in.h>
+#include <security/pam_appl.h>
 
 #include "log.h"
 #include "error.h"
@@ -95,16 +96,80 @@ get_current_user()
   return pwd->pw_name;
 }
 
+static int
+is_user_allowed(const char *user)
+{
+  char username[MAX_USERNAME];
+
+  FILE *fp = fopen(IVPN_USERS_FILE, "r");
+  if (fp == NULL) {
+    lerr("Unable to read users file %s", IVPN_USERS_FILE);
+    return 0;
+  }
+
+  while (fgets(username, MAX_USERNAME, fp) != NULL) {
+    username[MAX_USERNAME-1] = 0;
+    username[strlen(username)-1] = 0; // remove trailing newline
+    if (strcmp(user, username) == 0) {
+      fclose(fp);
+      return 1;
+    }
+  }
+
+  fclose(fp);
+
+  return 0;
+
+}
+
+static struct pam_response *reply = 0;
+
+static int
+null_conv(int num_msg, const struct pam_message **msg,
+          struct pam_response **resp, void *appdata_ptr)
+{
+        *resp = reply;
+        return PAM_SUCCESS;
+}
+
+static int
+authenticate_using_pam(const char *user, const char *pass)
+{
+  pam_handle_t *pamh = NULL;
+  static struct pam_conv conv = { null_conv, NULL };
+
+  int retval = pam_start(IVPN_PAM_SERVICE, user, &conv, &pamh);
+  if (retval == PAM_SUCCESS) {
+          reply = (struct pam_response *)malloc(sizeof(struct pam_response));
+          reply[0].resp = strdup(pass);
+          reply[0].resp_retcode = 0;
+
+          retval = pam_authenticate(pamh, 0);
+
+          if (retval == PAM_SUCCESS)
+            linfo("PAM authentication succeeded for user %s", user);
+          else
+            lerr("PAM authentication FAILED for user %s", user);
+
+          pam_end(pamh, PAM_SUCCESS);
+  } else
+  {
+    lerr("Unable to start PAM session '%s'", IVPN_PAM_SERVICE);
+  }
+
+  return (retval == PAM_SUCCESS) ? 1 : 0;
+
+}
+
 int
 authenticate_user(const char *user, const char *pass)
 {
-  // TODO: use /etc/ivpn/users for allowed users
-  // TODO: use PAM
+  if (!is_user_allowed(user)) {
+    lerr("User %s is now allowed to login through VPN");
+    return 0;
+  }
 
-  if (!strcmp(user, "seed") && !strcmp(pass, "seed"))
-    return 1;
-
-  return 0;
+  return authenticate_using_pam(user, pass);
 }
 
 

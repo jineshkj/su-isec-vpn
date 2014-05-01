@@ -25,7 +25,7 @@ CLI_OBJS    := $(patsubst %.c,%.o,$(CLI_SRC))
 SRV_OBJS    := $(patsubst %.c,%.o,$(SRV_SRC))
 
 CFLAGS  += -Wall -Werror
-LDFLAGS += -lssl -lcrypto
+LDFLAGS += -lssl -lcrypto -lpam
 
 all: install
 
