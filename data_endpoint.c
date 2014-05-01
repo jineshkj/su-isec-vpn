@@ -92,7 +92,20 @@ set_mtu(const char *ifname, int mtu)
 {
   char command[256];
 
+  linfo("Setting tunnel interface MTU to %u", mtu);
+
   snprintf(command, sizeof(command), "ifconfig %s mtu %u", ifname, mtu);
+  return system(command);
+}
+
+static int
+setup_iface(const char *iface)
+{
+  char command[256];
+
+  linfo("Setting up interface using script /etc/ivpn/interfaces/%s", iface);
+
+  snprintf(command, sizeof(command), "sh /etc/ivpn/interfaces/%s %s", iface, iface);
   return system(command);
 }
 
@@ -122,7 +135,8 @@ create_tun_iface()
 
   linfo("Allocated interface %s", ifr.ifr_name);
 
-  set_mtu(ifr.ifr_name, IVPN_TUNNEL_MTU); // just to avoid IP fragmentation
+  (void) set_mtu(ifr.ifr_name, IVPN_TUNNEL_MTU); // just to avoid IP fragmentation
+  (void) setup_iface(ifr.ifr_name);
 
   return tun_fd;
 }

@@ -138,6 +138,8 @@ authenticate_using_pam(const char *user, const char *pass)
   pam_handle_t *pamh = NULL;
   static struct pam_conv conv = { null_conv, NULL };
 
+  linfo("Attempting authentication using %s PAM service", IVPN_PAM_SERVICE);
+
   int retval = pam_start(IVPN_PAM_SERVICE, user, &conv, &pamh);
   if (retval == PAM_SUCCESS) {
           reply = (struct pam_response *)malloc(sizeof(struct pam_response));
