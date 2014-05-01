@@ -32,7 +32,7 @@ cm_auth_response_hton(cm_auth_response_t *r)
 }
 
 
-const cm_auth_password_t *
+cm_auth_password_t *
 create_cm_auth_password(const char *user, const char *pass, int port)
 {
   static cm_auth_password_t cm;
@@ -56,7 +56,7 @@ create_cm_auth_password(const char *user, const char *pass, int port)
   return &cm;
 }
 
-const cm_auth_response_t *
+cm_auth_response_t *
 create_cm_auth_response(int status, int port)
 {
   static cm_auth_response_t cm;
@@ -74,3 +74,21 @@ create_cm_auth_response(int status, int port)
 
   return &cm;
 }
+
+cm_setkey_t *
+create_cm_setkey(const char *key)
+{
+  static cm_setkey_t cm;
+
+  memset(&cm, 0, sizeof(cm));
+
+  cm.hdr.cm_len = sizeof(cm);
+  cm.hdr.cm_type = CM_TYPE_SETKEY;
+
+  memcpy(cm.key, key, sizeof(cm.key));
+
+  cm_header_hton(&cm.hdr);
+
+  return &cm;
+}
+

@@ -1,6 +1,8 @@
 #ifndef ISEC_CONTROL_H
 #define ISEC_CONTROL_H
 
+#include "defaults.h"
+
 #include <stdint.h>
 
 #define IVPN_PROTO_VERSION "1.0" // client need to match server's protocol version
@@ -10,8 +12,9 @@
 
 /* structures for control messages */
 
-#define CM_TYPE_ECHO 0  // control message for echo messages (unused)
-#define CM_TYPE_AUTH 1  // control message for authentication
+#define CM_TYPE_ECHO    0  // control message for echo messages (unused)
+#define CM_TYPE_AUTH    1  // control message for authentication
+#define CM_TYPE_SETKEY  2  // control message for setting new key
 
 #define CM_TYPE_OK   2  // ok response to previous message
 #define CM_TYPE_FAIL 3  // failure response to previous message
@@ -63,10 +66,18 @@ typedef struct cm_auth_password {
   char      password[MAX_PASSWORD];
 }__attribute__((packed)) cm_auth_password_t;
 
-const cm_auth_password_t *
+cm_auth_password_t *
 create_cm_auth_password(const char *user, const char *pass, int port);
 
-const cm_auth_response_t *
+cm_auth_response_t *
 create_cm_auth_response(int status, int port);
+
+typedef struct cm_setkey {
+  cm_header_t hdr;
+  uint8_t     key[IVPN_KEY_LENGTH];
+} __attribute__((packed)) cm_setkey_t;
+
+cm_setkey_t *
+create_cm_setkey(const char *key);
 
 #endif // ISEC_CONTROL_H

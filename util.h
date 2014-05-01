@@ -4,7 +4,7 @@
 #include "control.h"
 #include "sslutil.h"
 
-const char *
+char *
 get_password(const char *prompt);
 
 const char *

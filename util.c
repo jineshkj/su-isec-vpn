@@ -36,7 +36,7 @@ remove_newline(char *s)
   }
 }
 
-const char *
+char *
 get_password(const char *prompt)
 {
   struct termios oflags, nflags;
@@ -173,8 +173,11 @@ int
 ivpn_protocol_authenticate(sslutil_connection_t ssl_conn, const char *user,
                            const char *pass, int port)
 {
-  if (send_control_message(
-      ssl_conn, (cm_header_t *) create_cm_auth_password(user, pass, port))) {
+  cm_auth_password_t *msg = create_cm_auth_password(user, pass, port);
+  int r = send_control_message(ssl_conn, (cm_header_t *)msg);
+  memset(msg, 0, sizeof(*msg)); // clear plain text password
+
+  if (r != 0){
     cm_header_t *h = recv_control_message(ssl_conn);
     if (h->cm_type == CM_TYPE_AUTH) {
       cm_auth_response_t *rsp = (cm_auth_response_t *) h;
@@ -220,4 +223,3 @@ generate_pseudo_random(void *data, int datalen)
 
   return 1;
 }
-

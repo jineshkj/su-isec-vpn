@@ -4,6 +4,8 @@
  * Copyright (c) 2014 Jinesh J <jineshkj at gmail dot com>
  */
 
+#include <errno.h>
+#include <string.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -23,7 +25,6 @@
 #include "data_endpoint.h"
 
 static const char *username = 0;
-static const char *password = 0;
 
 static const char *server = 0;
 static int port = IVPN_SERV_PORT;
@@ -93,6 +94,7 @@ parse_options(int argc, char **argv)
 static int
 control_channel_handler(int connfd)
 {
+  char *password;
   data_endpoint_t *ep;
   sslutil_connection_t ssl_conn;
 
@@ -113,11 +115,19 @@ control_channel_handler(int connfd)
 
   assert(ep != 0);
 
+  usleep(100000); // 100 ms
+
+  password = get_password("Password:");
+  if (password == 0) {
+    return EXIT_PASSWORD;
+  }
+
   ep->peer_port = ivpn_protocol_authenticate(ssl_conn, username, password, ep->udp_port);
   if (ep->peer_port == 0) {
     linfo ("Authentication failed.");
     return EXIT_AUTH_ERROR;
   }
+  memset(password, 0, strlen(password)); // clear plain text password
 
   linfo ("Authenticated with server. Data port is %u", ep->peer_port);
 
@@ -126,8 +136,66 @@ control_channel_handler(int connfd)
   write(ep->write_fd, &ep->peer_ip, sizeof(ep->peer_ip));
   write(ep->write_fd, &ep->peer_port, sizeof(ep->peer_port));
 
-  while (1)
-    sleep (1);
+  usleep(100000); // 100 ms
+
+  while (1) {
+    char command[64];
+    fprintf(stdout, "ivpn> ");
+    fflush(stdout);
+    if (fgets(command, sizeof(command) - 1, stdin) == 0) {
+      linfo("End of input. Terminating...");
+      break;
+    }
+
+    if (strcmp(command, "quit\n") == 0) {
+      linfo("Quit command. Terminating...");
+      break;
+    }
+
+    if (strcmp(command, "changekey\n") == 0) {
+      char key[IVPN_KEY_LENGTH];
+
+      linfo("Performing key change.");
+      generate_true_random(key, sizeof(key));
+
+      /* send key to local UDP process first */
+      if (write(ep->write_fd, key, sizeof(key)) != sizeof(key)) {
+        lerr("Unable to send key to local UDP process : %s. Quitting...", strerror(errno));
+        break;
+      } else
+      {
+        linfo("New key sent to local UDP process");
+      }
+
+      /* send key to VPN server */
+      cm_setkey_t *cm = create_cm_setkey(key);
+      if (cm == 0) {
+        lerr ("Unable to generate command for sending to VPN server. Quitting...");
+        break;
+      }
+
+      if (send_control_message(ssl_conn, (cm_header_t *)cm) == 0) {
+        lerr ("Unable to sending command to VPN server. Quitting...");
+        break;
+      }
+
+      cm_header_t *rsp = recv_control_message(ssl_conn);
+      if (rsp == 0) {
+        lerr ("Unable to receive command from VPN server. Quitting...");
+        break;
+      }
+
+      if (rsp->cm_type == CM_TYPE_OK) {
+        linfo("Setting new key in server succeeded");
+      } else
+      {
+        lerr("Setting new key in server failed. Quitting...");
+        break;
+      }
+    }
+
+  }
+
 
   return 0;
 }
@@ -161,11 +229,6 @@ main(int argc, char *argv[])
       exit(EXIT_FAILURE);
   }
 
-  password = get_password("Password:");
-  if (password == 0) {
-    exit(EXIT_PASSWORD);
-  }
-  
   if (!sslutil_init(CA_CERT_FILE, 0, 0))
     return EXIT_SSL_ERROR;
 

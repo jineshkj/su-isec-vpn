@@ -26,6 +26,8 @@
 
 static int port = IVPN_SERV_PORT;
 static char client_ip[32];
+static data_endpoint_t *ep = 0;
+static int quit_process = 0;
 
 static void 
 usage()
@@ -88,7 +90,6 @@ process_auth_password(sslutil_connection_t conn, cm_auth_password_t *ap)
 
   if (authenticate_user(ap->username, ap->password)) {
     cm_header_t * rsp;
-    data_endpoint_t *ep;
 
     ep = start_data_endpoint();
 
@@ -123,6 +124,7 @@ process_auth(sslutil_connection_t conn, cm_auth_t *auth)
   {
   case CM_AUTH_PASSWORD:
     ret = process_auth_password(conn, (cm_auth_password_t *) auth);
+    memset(auth, 0, sizeof(cm_auth_password_t)); // clear plain text password
     break;
 
   default:
@@ -134,12 +136,48 @@ process_auth(sslutil_connection_t conn, cm_auth_t *auth)
 }
 
 static int
+process_setkey(sslutil_connection_t conn, cm_setkey_t *sk)
+{
+  if (ep == 0) {
+    lerr("Unable to set new key since data endpoint not yet running");
+    return -1;
+  }
+
+  cm_header_t response;
+
+  response.cm_len = sizeof(response);
+
+  /* send key to local UDP process */
+  if (write(ep->write_fd, sk->key, sizeof(sk->key)) != sizeof(sk->key)) {
+    lerr("Unable to send new key to UDP process : %s", strerror(errno));
+    response.cm_type = CM_TYPE_FAIL;
+  } else
+  {
+    linfo("New key sent to local UDP process");
+    response.cm_type = CM_TYPE_OK;
+  }
+  memset(sk, 0, sizeof(sk));
+
+  cm_header_hton(&response);
+  if (send_control_message(conn, &response) == 0) {
+    lerr("Unable to send response back to client. Terminating...");
+    quit_process = 1;
+  }
+
+  return EXIT_OK;
+}
+
+static int
 process_control_message(sslutil_connection_t conn, cm_header_t *cm)
 {
   int ret = EXIT_OK;
 
   switch (cm->cm_type)
   {
+  case CM_TYPE_SETKEY:
+    ret = process_setkey(conn, (cm_setkey_t*)cm);
+    break;
+
   case CM_TYPE_AUTH:
     ret = process_auth(conn, (cm_auth_t *) cm);
     break;
@@ -226,8 +264,7 @@ run_server()
 
   linfo ("Server started on port %u", port);
 
-  // TODO: need a loop termination mechanism using SIGQUIT signal
-  while (1) {
+  while (!quit_process) {
     int client_port = 0;
     pid_t conn_handler = 0;
 
@@ -266,55 +303,3 @@ main(int argc, char *argv[])
 
   return run_server();
 }
-
-
-
-#if 0
-/***************************************/
-
-static uint32_t client_ip = 0;
-static uint16_t client_port = 0;
-
-static int udp_sock = -1;
-static int tun_fd = -1;
-
-//---- entry point for ivpn server ---
-
-int
-ivpn_server(uint16_t port)
-{
-  char buf[1500];
-  struct in_addr addr;
-  
-  printf("ivpn server listening on %u\n", ntohs(port));
-  
-  client_port = port;
-  
-  if ((udp_sock = create_udp_socket(port)) == -1)
-    return -1;
-  
-  if ((tun_fd = create_tun_iface("ivpn")) == -1)
-    return -1;
-  
-//   if (set_ifip("ivpn0", "10.0.88.1") == -1)
-//     return -1;
-//   
-  system("ip addr add 10.0.88.1/24 dev ivpn0");
-  system("route add -net 10.0.44.0 netmask 255.255.255.0 dev ivpn0");
-  
-  if (recv_data(udp_sock, buf, sizeof(buf), &addr) == -1) {
-    return -1;
-  }
-  buf[sizeof(buf) - 1] = '\0';
-  
-  printf("Received message : %s\n", buf);
-  
-  if (strcmp(buf, "Hello ivpn !!") == 0) {
-    printf("Connection established from %s\n", inet_ntoa(addr));
-    client_ip = addr.s_addr;
-  }
-  
-  return link_fds(tun_fd, udp_sock, client_ip, client_port);
-}
-
-#endif
