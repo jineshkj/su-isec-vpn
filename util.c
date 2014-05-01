@@ -168,7 +168,7 @@ int
 authenticate_user(const char *user, const char *pass)
 {
   if (!is_user_allowed(user)) {
-    lerr("User %s is now allowed to login through VPN");
+    lerr("User '%s' is now allowed to login through VPN", user);
     return 0;
   }
 
@@ -247,6 +247,11 @@ ivpn_protocol_authenticate(sslutil_connection_t ssl_conn, const char *user,
 
   if (r != 0){
     cm_header_t *h = recv_control_message(ssl_conn);
+    if (h == 0) {
+      lerr("VPN server terminated during authentication");
+      return 0;
+    }
+
     if (h->cm_type == CM_TYPE_AUTH) {
       cm_auth_response_t *rsp = (cm_auth_response_t *) h;
       cm_auth_response_ntoh(rsp);
@@ -335,7 +340,7 @@ get_uid_from_name(const char *username)
 
 
 int
-relinquish_superuser()
+relinquish_superuser(const char *newuser)
 {
   uid_t uid, euid, newuid;
 
@@ -353,7 +358,10 @@ relinquish_superuser()
   }
 
   if (uid == 0) { // if user is root, change to 'bin' user
-    newuid = get_uid_from_name(IVPN_NO_SU_USER);
+    if (newuser)
+      newuid = get_uid_from_name(newuser);
+    else
+      newuid = get_uid_from_name(IVPN_NO_SU_USER);
   } else
   {
     newuid = uid;

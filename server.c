@@ -89,17 +89,19 @@ process_auth_password(sslutil_connection_t conn, cm_auth_password_t *ap)
   ldbg("Pass = %s", ap->password);
 
   if (authenticate_user(ap->username, ap->password)) {
-    cm_header_t * rsp;
+    memset(ap->password, 0, sizeof(ap->password));
 
-    ep = start_data_endpoint();
+    ep = start_data_endpoint(ap->username);
 
     assert (ep != 0);
 
-    if (relinquish_superuser() == 0) {
+    /* change to the logged in user */
+    if (relinquish_superuser(ap->username) == 0) {
       lerr("Unable to relinquish privileges. Quitting.");
       return EXIT_FAILURE;
     }
 
+    cm_header_t * rsp;
     rsp = (cm_header_t *) create_cm_auth_response(CM_AUTH_OK, ep->udp_port);
 
     ep->peer_ip = inet_addr(client_ip);
@@ -116,6 +118,8 @@ process_auth_password(sslutil_connection_t conn, cm_auth_password_t *ap)
       return EXIT_OK;
   } else
   {
+    memset(ap->password, 0, sizeof(ap->password));
+
     cm_header_t *rsp = (cm_header_t *) create_cm_auth_response(CM_AUTH_FAIL, 0);
 
     if (send_control_message(conn, rsp))
@@ -134,7 +138,6 @@ process_auth(sslutil_connection_t conn, cm_auth_t *auth)
   {
   case CM_AUTH_PASSWORD:
     ret = process_auth_password(conn, (cm_auth_password_t *) auth);
-    memset(auth, 0, sizeof(cm_auth_password_t)); // clear plain text password
     break;
 
   default:

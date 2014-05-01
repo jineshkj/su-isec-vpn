@@ -27,6 +27,10 @@ SRV_OBJS    := $(patsubst %.c,%.o,$(SRV_SRC))
 CFLAGS  += -Wall -Werror
 LDFLAGS += -lssl -lcrypto -lpam
 
+ifeq ($(DEBUG),1)
+CFLAGS += -g
+endif
+
 all: install
 
 install: $(CLIENT) $(SERVER)

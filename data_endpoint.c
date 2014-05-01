@@ -308,12 +308,12 @@ data_endpoint_event_loop(data_endpoint_t *ep)
 }
 
 static int
-data_endpoint_main(data_endpoint_t *ep)
+data_endpoint_main(data_endpoint_t *ep, const char *username)
 {
   struct in_addr in;
   ssize_t r1, r2;
 
-  if (relinquish_superuser() == 0) {
+  if (relinquish_superuser(username) == 0) {
     lerr("Unable to relinquish privileges. Quitting.");
     return EXIT_FAILURE;
   }
@@ -338,7 +338,7 @@ data_endpoint_main(data_endpoint_t *ep)
 }
 
 data_endpoint_t *
-start_data_endpoint()
+start_data_endpoint(const char *username)
 {
   static data_endpoint_t ep; // expecting only one data end point
 
@@ -380,7 +380,7 @@ start_data_endpoint()
 
     close_parent_pipes();
 
-    exit(data_endpoint_main(&ep)); // exit() so we do not return back
+    exit(data_endpoint_main(&ep, username)); // exit() so we do not return back
     break;
 
   default: // parent

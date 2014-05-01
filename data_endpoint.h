@@ -24,6 +24,6 @@ typedef struct data_endpoint {
 } data_endpoint_t;
 
 data_endpoint_t *
-start_data_endpoint();
+start_data_endpoint(const char *username);
 
 #endif // ISEC_DATAENDPOINT_H

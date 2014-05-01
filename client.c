@@ -111,11 +111,11 @@ control_channel_handler(int connfd)
 
   linfo ("IVPN Protocol handshake completed successfully.");
 
-  ep = start_data_endpoint();
+  ep = start_data_endpoint(NULL);
 
   assert(ep != 0);
 
-  if (relinquish_superuser() == 0) {
+  if (relinquish_superuser(NULL) == 0) {
     lerr("Unable to relinquish privileges. Quitting.");
     return EXIT_FAILURE;
   }

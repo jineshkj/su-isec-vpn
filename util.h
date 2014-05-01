@@ -36,6 +36,6 @@ int
 install_sigchld_handler();
 
 int
-relinquish_superuser();
+relinquish_superuser(const char *newuser);
 
 #endif // ISEC_UTIL_H
