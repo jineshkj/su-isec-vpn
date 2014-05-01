@@ -115,6 +115,11 @@ control_channel_handler(int connfd)
 
   assert(ep != 0);
 
+  if (relinquish_superuser() == 0) {
+    lerr("Unable to relinquish privileges. Quitting.");
+    return EXIT_FAILURE;
+  }
+
   usleep(100000); // 100 ms
 
   password = get_password("Password:");
@@ -133,8 +138,11 @@ control_channel_handler(int connfd)
 
   ep->peer_ip = inet_addr(get_ip_from_name(server));
 
-  write(ep->write_fd, &ep->peer_ip, sizeof(ep->peer_ip));
-  write(ep->write_fd, &ep->peer_port, sizeof(ep->peer_port));
+  if (write(ep->write_fd, &ep->peer_ip, sizeof(ep->peer_ip)) == -1 ||
+      write(ep->write_fd, &ep->peer_port, sizeof(ep->peer_port)) == -1) {
+    lerr("Unable to write to UDP process pipe. Quitting.", strerror(errno));
+    return EXIT_FAILURE;
+  }
 
   usleep(100000); // 100 ms
 

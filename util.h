@@ -35,4 +35,7 @@ generate_pseudo_random(void *data, int datalen);
 int
 install_sigchld_handler();
 
+int
+relinquish_superuser();
+
 #endif // ISEC_UTIL_H

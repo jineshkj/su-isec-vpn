@@ -9,6 +9,7 @@
 #define SERVER_KEY_FILE  "/etc/ivpn/isec-vpn.key"
 #define IVPN_USERS_FILE  "/etc/ivpn/users"
 #define IVPN_PAM_SERVICE "ivpn"
+#define IVPN_NO_SU_USER  "bin"
 
 #define IVPN_IV_LENGTH   32 // AES iv length
 #define IVPN_KEY_LENGTH  32 // AES key length of 32 bytes = 256 bits

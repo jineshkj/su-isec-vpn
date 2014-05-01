@@ -95,12 +95,22 @@ process_auth_password(sslutil_connection_t conn, cm_auth_password_t *ap)
 
     assert (ep != 0);
 
+    if (relinquish_superuser() == 0) {
+      lerr("Unable to relinquish privileges. Quitting.");
+      return EXIT_FAILURE;
+    }
+
     rsp = (cm_header_t *) create_cm_auth_response(CM_AUTH_OK, ep->udp_port);
 
     ep->peer_ip = inet_addr(client_ip);
     ep->peer_port = ntohs(ap->auth.port);
-    write(ep->write_fd, &ep->peer_ip, sizeof(ep->peer_ip));
-    write(ep->write_fd, &ep->peer_port, sizeof(ep->peer_port));
+
+    if (write(ep->write_fd, &ep->peer_ip, sizeof(ep->peer_ip)) == -1 ||
+        write(ep->write_fd, &ep->peer_port, sizeof(ep->peer_port)) == -1) {
+      lerr("Unable to write to UDP process pipe. Quitting.", strerror(errno));
+      quit_process = 1;
+      return EXIT_FAILURE;
+    }
 
     if (send_control_message(conn, rsp))
       return EXIT_OK;

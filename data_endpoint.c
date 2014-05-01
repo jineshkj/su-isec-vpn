@@ -313,6 +313,11 @@ data_endpoint_main(data_endpoint_t *ep)
   struct in_addr in;
   ssize_t r1, r2;
 
+  if (relinquish_superuser() == 0) {
+    lerr("Unable to relinquish privileges. Quitting.");
+    return EXIT_FAILURE;
+  }
+
   linfo("Waiting for peer IP and port");
 
   /* wait for the control end point to send you the peer IP and

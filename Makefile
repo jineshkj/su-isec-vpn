@@ -31,6 +31,11 @@ all: install
 
 install: $(CLIENT) $(SERVER)
 	cp -v $(CLIENT) $(SERVER) /tmp
+	sudo cp -vf /tmp/$(CLIENT) /usr/bin/
+	sudo cp -vf /tmp/$(SERVER) /usr/sbin/
+	sudo chown root:root /usr/bin/$(CLIENT)
+	sudo chown root:root /usr/sbin/$(SERVER)
+	sudo chmod +s /usr/bin/$(CLIENT)
 	
 $(CLIENT): $(CLI_OBJS)
 	cc -o $@ $^ $(LDFLAGS)

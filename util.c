@@ -91,7 +91,7 @@ get_current_user()
 {
   struct passwd *pwd = getpwuid(getuid());
   if (pwd == 0) {
-    lerr("Unable to get current user name");
+    lerr("Unable to get current user name : %s", strerror(errno));
     return 0;
   }
 
@@ -320,3 +320,54 @@ install_sigchld_handler()
   return 1;
 }
 
+
+static uid_t
+get_uid_from_name(const char *username)
+{
+  struct passwd *pwd = getpwnam(username);
+  if (pwd == 0) {
+    lerr("Unable to get passwd details for %s : %s", username, strerror(errno));
+    return 0;
+  }
+
+  return pwd->pw_uid;
+}
+
+
+int
+relinquish_superuser()
+{
+  uid_t uid, euid, newuid;
+
+  uid = getuid();
+  euid = geteuid();
+
+  if (euid != 0) { //already non-root privilege. setuid to set the saved uid.
+    linfo("Effective UID already lower. Setting is as saved UID.");
+    if (setuid(euid) == -1) {
+      lerr("Unable to set UID to %u : %s", euid, strerror(errno));
+      return 0;
+    }
+
+    return 1;
+  }
+
+  if (uid == 0) { // if user is root, change to 'bin' user
+    newuid = get_uid_from_name(IVPN_NO_SU_USER);
+  } else
+  {
+    newuid = uid;
+  }
+
+  assert (newuid != 0); // should never happen
+
+  if (setuid(newuid) == -1) {
+    lerr("Unable to set UID to %u : %s", newuid, strerror(errno));
+    return 0;
+  }
+
+  linfo("Relinquished superuser privileges : UID=%u,EUID=%u --> UID=%u,EUID=%u",
+        uid, euid, getuid(), geteuid());
+
+  return 1;
+}
