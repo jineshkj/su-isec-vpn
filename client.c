@@ -222,7 +222,11 @@ main(int argc, char *argv[])
   set_process_name("ivpn-client");
 
   parse_options(argc, argv);
-  
+
+  if (geteuid() != 0) {
+    lerr("Effective UID is %u. It need to be 0.", geteuid());
+  }
+
   if (username == 0) {
     username = get_current_user();
     if (username == 0)

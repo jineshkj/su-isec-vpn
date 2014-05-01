@@ -298,6 +298,11 @@ main(int argc, char *argv[])
 
   parse_options(argc, argv);
 
+  if (geteuid() != 0) {
+    lerr("Effective UID is %u. It need to be 0.", geteuid());
+    return EXIT_FAILURE;
+  }
+
   if (!sslutil_init(CA_CERT_FILE, SERVER_CERT_FILE, SERVER_KEY_FILE))
     return EXIT_SSL_ERROR;
 
