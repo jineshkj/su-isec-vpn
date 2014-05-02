@@ -61,7 +61,7 @@ sslutil_init(const char *cacert_file, const char *certfile,
   ERR_clear_error();
   
   if (!ssl_client_ctx)
-    ssl_client_ctx = SSL_CTX_new (SSLv23_client_method());
+    ssl_client_ctx = SSL_CTX_new (TLSv1_2_client_method());
   
   if (ssl_client_ctx == 0) {
     log_ssl_err ("Unable to create SSL client context");
@@ -69,7 +69,7 @@ sslutil_init(const char *cacert_file, const char *certfile,
   }
   
   if (!ssl_server_ctx)
-    ssl_server_ctx = SSL_CTX_new (SSLv23_server_method());
+    ssl_server_ctx = SSL_CTX_new (TLSv1_2_server_method());
   
   if (ssl_server_ctx == 0) {
     log_ssl_err ("Unable to create SSL server context");
